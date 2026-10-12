@@ -1,0 +1,3 @@
+- **Attributes:** `self.items` (initialized in `__init__`) ensures every cart instance maintains an independent state.
+- **Methods:** `add_item()` and `calculate_total()` belong here to enforce **cohesion** (keeping data and operations together).
+- **Design Decision:** Used a `CartItem` dataclass to group item details cleanly, adhering to the Single Responsibility Principle.
