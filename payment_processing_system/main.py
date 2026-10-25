@@ -1,146 +1,182 @@
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from decimal import Decimal
+class Product:
+    def __init__(self, item_id, item_name, base_price):
+        self.item_id = item_id
+        self.item_name = item_name
+        self.base_price = base_price
+
+    def calculate_price(self):
+        return self.base_price
+    def get_info(self):
+        return "{} -> PKR {}".format(self.item_name, self.calculate_price())
 
 
-@dataclass(frozen=True)
-class Product(ABC):
-    name: str
-    price: Decimal
-
-    def __post_init__(self) -> None:
-        if not self.name.strip():
-            raise ValueError("Product name cannot be empty.")
-        if self.price < Decimal("0"):
-            raise ValueError("Product price cannot be negative.")
-
-    @abstractmethod
-    def unit_total(self) -> Decimal:
-        """Return the per-unit price including product-specific costs."""
-
-
-@dataclass(frozen=True)
 class PhysicalProduct(Product):
-    shipping_fee: Decimal = Decimal("0.00")
+    def __init__(self, item_id, item_name, base_price, shipping_fee):
+        super().__init__(item_id, item_name, base_price)
+        self.shipping_fee = shipping_fee
 
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        if self.shipping_fee < Decimal("0"):
-            raise ValueError("Shipping fee cannot be negative.")
+    def calculate_price(self):
+        return self.base_price + self.shipping_fee
 
-    def unit_total(self) -> Decimal:
-        return self.price + self.shipping_fee
+    def get_info(self):
+        return "{} (Physical) -> PKR {}".format(
+            self.item_name, self.calculate_price()
+        )
 
 
-@dataclass(frozen=True)
 class DigitalProduct(Product):
-    def unit_total(self) -> Decimal:
-        return self.price
+    def __init__(self, item_id, item_name, base_price, discount):
+        super().__init__(item_id, item_name, base_price)
+        self.discount = discount
 
+    def calculate_price(self):
+        discount_amount = self.base_price * (self.discount / 100)
+        return int(self.base_price - discount_amount)
 
-@dataclass(frozen=True)
-class OrderItem:
-    product: Product
-    quantity: int = 1
+    def get_info(self):
+        return "{} (Digital, {}% OFF) -> PKR {}".format(
+            self.item_name, self.discount, self.calculate_price()
+        )
 
-    def __post_init__(self) -> None:
-        if self.quantity <= 0:
-            raise ValueError("Quantity must be positive.")
+class CardPayment:
+    def __init__(self, card_num, owner_name):
+        self.card_num = card_num
+        self.owner_name = owner_name
 
-    @property
-    def subtotal(self) -> Decimal:
-        return self.product.unit_total() * self.quantity
+    def pay_bill(self, total_amount):
+        bank_fee = int(total_amount * 0.02)
+        final_bill = int(total_amount + bank_fee)
+        hidden_card = "****-****-****-{}".format(self.card_num[-4:])
 
+        print("\n--- Card Payment Processing ---")
+        print("Card Holder : {}".format(self.owner_name))
+        print("Card Number : {}".format(hidden_card))
+        print("Subtotal    : PKR {}".format(int(total_amount)))
+        print("Card Fee 2% : PKR {}".format(bank_fee))
+        print("Total Paid  : PKR {}".format(final_bill))
+        print("Status      : Payment Successful!")
+        return True
+class CashOnDelivery:
+    def __init__(self, address):
+        self.address = address
 
-@dataclass
+    def pay_bill(self, total_amount):
+        cod_charge = 150
+        final_bill = int(total_amount + cod_charge)
+
+        print("\n--- Cash on Delivery ---")
+        print("Address     : {}".format(self.address))
+        print("Subtotal    : PKR {}".format(int(total_amount)))
+        print("COD Charge  : PKR {}".format(cod_charge))
+        print("Collect Cash: PKR {}".format(final_bill))
+        print("Status      : Order Placed (Pending Cash Collection)")
+        return True
+
 class Order:
-    customer_name: str
-    items: list[OrderItem]
-    is_paid: bool = False
+    def __init__(self, order_no):
+        self.order_no = order_no
+        self.items_list = []
 
-    def __post_init__(self) -> None:
-        if not self.customer_name.strip():
-            raise ValueError("Customer name cannot be empty.")
-        if not self.items:
-            raise ValueError("An order must contain at least one item.")
+    def add_item(self, item):
+        self.items_list.append(item)
+        print("Success: '{}' added to cart.".format(item.item_name))
 
-    @property
-    def total(self) -> Decimal:
-        return sum((item.subtotal for item in self.items), Decimal("0.00"))
+    def get_total_price(self):
+        bill = 0
+        for item in self.items_list:
+            bill += item.calculate_price()
+        return int(bill)
 
+    def print_bill(self):
+        print("------ Cart Summary (Order #{}) --------".format(self.order_no))
+        print("==========================================")
+        if not self.items_list:
+            print("Cart is empty.")
+            return
+        count = 1
+        for item in self.items_list:
+            print("{}. {}".format(count, item.get_info()))
+            count = count + 1
 
-class Customer:
-    def __init__(self, name: str) -> None:
-        if not name.strip():
-            raise ValueError("Customer name cannot be empty.")
-        self.name = name
+        print("------------------------------------------")
+        print("Subtotal Amount: PKR {}".format(self.get_total_price()))
 
-    def place_order(self, items: list[OrderItem]) -> Order:
-        return Order(customer_name=self.name, items=items)
+    def checkout(self, payment_option):
+        self.print_bill()
+        bill_amount = self.get_total_price()
 
-
-class PaymentMethod(ABC):
-    @abstractmethod
-    def pay(self, amount: Decimal) -> str:
-        """Process a payment and return a confirmation message."""
-
-
-class CardPayment(PaymentMethod):
-    def pay(self, amount: Decimal) -> str:
-        return f"Card payment approved: ${amount:.2f}"
-
-
-class CashPayment(PaymentMethod):
-    def pay(self, amount: Decimal) -> str:
-        return f"Cash payment received: ${amount:.2f}"
+        if bill_amount > 0:
+            payment_option.pay_bill(bill_amount)
+            print("\nCheckout Completed Successfully!\n")
+        else:
+            print("\nCheckout Failed: Cart is empty.")
 
 
-class CheckoutService:
-    def checkout(self, order: Order, payment_method: PaymentMethod) -> None:
-        if order.is_paid:
-            raise ValueError("This order has already been paid.")
+catalog = {
+    "1": PhysicalProduct("P101", "Keyboard", 2500, 200),
+    "2": DigitalProduct("D101", "E-Book", 1200, 10),
+    "3": PhysicalProduct("P102", "Book", 800, 150),
+    "4": DigitalProduct("D102", "Online Course", 3000, 15),
+}
+user_order = Order("1001")
+while True:
+    print("\n==========================================")
+    print("      ONLINE SHOPPING SYSTEM MENU         ")
+    print("1. View Store Products")
+    print("2. Add Product to Cart")
+    print("3. View Cart Summary")
+    print("4. Proceed to Checkout")
+    print("5. Exit")
 
-        print(f"Order for {order.customer_name}:")
-        for item in order.items:
-            print(
-                f"  {item.product.name} x{item.quantity}: "
-                f"${item.subtotal:.2f}"
-            )
-        print(f"Total: ${order.total:.2f}")
-        print(payment_method.pay(order.total))
-        order.is_paid = True
-        print("Checkout complete.\n")
+    choice = input("\nEnter choice (1-5): ").strip()
 
+    if choice == "1":
+        print("\n--- AVAILABLE PRODUCTS ---")
+        for product_id in catalog:
+            print("{}. {}".format(product_id, catalog[product_id].get_info()))
 
-def main() -> None:
-    keyboard = PhysicalProduct(
-        name="Keyboard",
-        price=Decimal("45.00"),
-        shipping_fee=Decimal("5.00"),
-    )
-    book = PhysicalProduct(
-        name="Python Programming Book",
-        price=Decimal("30.00"),
-        shipping_fee=Decimal("4.00"),
-    )
-    ebook = DigitalProduct(name="Python E-book", price=Decimal("15.00"))
+    elif choice == "2":
+        print("\n--- SELECT PRODUCT TO ADD ---")
+        for product_id in catalog:
+            print("{}. {}".format(product_id, catalog[product_id].item_name))
 
-    customer = Customer("Haris Rauf")
-    order_items = [
-        OrderItem(keyboard),
-        OrderItem(book),
-        OrderItem(ebook, quantity=2),
-    ]
-    checkout = CheckoutService()
+        num = input("\nEnter product number (1-4): ").strip()
+        if num in catalog:
+            user_order.add_item(catalog[num])
+        else:
+            print("Invalid choice.")
 
-    print("=== Card checkout ===")
-    card_order = customer.place_order(order_items)
-    checkout.checkout(card_order, CardPayment())
+    elif choice == "3":
+        user_order.print_bill()
 
-    print("=== Cash checkout ===")
-    cash_order = customer.place_order(order_items)
-    checkout.checkout(cash_order, CashPayment())
+    elif choice == "4":
+        if not user_order.items_list:
+            print("\nCart is empty! Add products first.")
+            continue
 
+        print("\n--- PAYMENT METHOD ---")
+        print("1. Card Payment")
+        print("2. Cash on Delivery")
 
-if __name__ == "__main__":
-    main()
+        pay_choice = input("Select payment method (1-2): ").strip()
+
+        if pay_choice == "1":
+            name = input("Enter Card Holder Name: ").strip()
+            card_num = input("Enter 16-Digit Card Number: ").strip()
+            payment = CardPayment(card_num, name)
+            user_order.checkout(payment)
+            break
+
+        elif pay_choice == "2":
+            address = input("Enter Delivery Address: ").strip()
+            payment = CashOnDelivery(address)
+            user_order.checkout(payment)
+            break
+        else:
+            print("Invalid payment choice.")
+
+    elif choice == "5":
+        print("\nExiting system.")
+        break
+    else:
+        print("Invalid choice, enter a number from 1 to 5.")
